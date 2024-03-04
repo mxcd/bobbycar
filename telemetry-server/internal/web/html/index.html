@@ -1,0 +1,214 @@
+<html>
+  <head>
+    <link rel="stylesheet" href="./css/pico.min.css" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>BobbyCar State</title>
+    <meta name="description" content="Building and signing JWTs" />
+
+    <style>
+      .boolDisplay {
+        width: 25px;
+        height: 25px;
+        border-radius: 5px;
+      }
+      .boolDisplayTrue {
+        background-color: green;
+      }
+      .boolDisplayFalse {
+        background-color: red;
+      }
+    </style>
+  </head>
+</html>
+<body>
+  <!-- Header -->
+  <header class="container">
+    <hgroup>
+      <h1>BobbyCar Telemetry</h1>
+      <p>State and telemetry</p>
+    </hgroup>
+    <nav>
+      <ul>
+        <li><a href="#" data-theme-switcher="auto">Auto</a></li>
+        <li><a href="#" data-theme-switcher="light">Light</a></li>
+        <li><a href="#" data-theme-switcher="dark">Dark</a></li>
+      </ul>
+    </nav>
+  </header>
+  <main class="container" id="app">
+    <section id="State">
+      <h2>State</h2>
+      <p>State information</p>
+      <button @click="reconnect">Reconnect</button>
+      <div>Main Loop #{{ data.loopCounter }}</div>
+      <table>
+        <tr>
+          <th>DeadManSwitch</th>
+          <th>ACC</th>
+          <th>BRK</th>
+          <th>Steering Startup</th>
+          <th>Steering Panic!</th>
+          <th>Steering Watchdog</th>
+        </tr>
+        <tr>
+          <td>
+            <div
+              :class="[`boolDisplay`, data.steeringDeadManSwitchPressed ? `boolDisplayTrue` : `boolDisplayFalse`]"
+            ></div>
+          </td>
+          <td>
+            <div
+              :class="[`boolDisplay`, data.steeringAccelerationCommand ? `boolDisplayTrue` : `boolDisplayFalse`]"
+            ></div>
+          </td>
+          <td>
+            <div
+              :class="[`boolDisplay`, data.steeringBrakeCommand ? `boolDisplayTrue` : `boolDisplayFalse`]"
+            ></div>
+          </td>
+          <td>
+            <div
+              :class="[`boolDisplay`, data.steeringStartupCheckOk ? `boolDisplayTrue` : `boolDisplayFalse`]"
+            ></div>
+          </td>
+          <td>
+            <div
+              :class="[`boolDisplay`, data.steeringPanic ? `boolDisplayTrue` : `boolDisplayFalse`]"
+            ></div>
+          </td>
+          <td><div>{{ data.steeringWatchdogIndex }}</div></td>
+        </tr>
+      </table>
+      <hr />
+      <table>
+        <tr>
+          <th>Relay MC EN</th>
+          <th>Relay Precharge</th>
+          <th>Relay SC OK</th>
+        </tr>
+        <tr>
+          <td>
+            <div
+              :class="[`boolDisplay`, data.relayMcEn ? `boolDisplayTrue` : `boolDisplayFalse`]"
+            ></div>
+          </td>
+          <td>
+            <div
+              :class="[`boolDisplay`, data.relayPrecharge ? `boolDisplayTrue` : `boolDisplayFalse`]"
+            ></div>
+          </td>
+          <td>
+            <div
+              :class="[`boolDisplay`, data.relayScOk ? `boolDisplayTrue` : `boolDisplayFalse`]"
+            ></div>
+          </td>
+        </tr>
+      </table>
+    </section>
+    <hr />
+    <section id="Foo">
+      <!-- <details> -->
+      <h2>State</h2>
+      <h3>Current state: {{ getStateString(data.vehicleState) }}</h3>
+      <table>
+        <tr>
+          <th>DC Voltage</th>
+          <th>Speed Request Left</th>
+          <th>Speed Left</th>
+          <th>Speed Request Right</th>
+          <th>Speed Right</th>
+        </tr>
+        <tr>
+          <td>{{ data.vdBatteryVoltage }} V</td>
+          <td>{{ data.vdSpeedRequestLeft }}</td>
+          <td>{{ data.vdSpeedLeft }} rpm</td>
+          <td>{{ data.vdSpeedRequestRight }}</td>
+          <td>{{ data.vdSpeedRight }} rpm</td>
+        </tr>
+      </table>
+    </section>
+    <dialog open v-if="showDialog">
+      <article>
+        <h2>Hello</h2>
+        <p>Some Dialog</p>
+
+        <footer>
+          <button @click="showDialog=false" className="secondary">
+            Cancel
+          </button>
+          <button @click="showDialog=false">Save</button>
+        </footer>
+      </article>
+    </dialog>
+  </main>
+  <script src="js/minimal-theme-switcher.js"></script>
+  <script src="js/modal.js"></script>
+</body>
+<script type="module">
+  import {
+    createApp,
+    ref,
+    watch,
+    onMounted,
+    reactive,
+  } from "./js/vue.esm-browser.prod.js";
+
+  createApp({
+    setup() {
+      const showDialog = ref(false);
+
+      const data = ref({
+        loopCounter: 0,
+        vehicleState: -1,
+      });
+
+      let websocketConnection = null;
+
+      function reconnect() {
+        if (websocketConnection) {
+          websocketConnection.close();
+        }
+        console.log("Reconnecting websocket");
+        websocketConnection = new WebSocket(
+          "ws://" + document.location.host + "/ws"
+        );
+        websocketConnection.onopen = function (event) {
+          console.log("Websocket connected");
+        };
+        websocketConnection.onmessage = function (event) {
+          data.value = JSON.parse(event.data);
+        };
+      }
+
+      onMounted(() => {
+        reconnect();
+      });
+
+      function getStateString(state) {
+        switch (state) {
+          case 0:
+            return "IDLE";
+          case 1:
+            return "PRECHARGING";
+          case 2:
+            return "TS_ACTIVE";
+          case 3:
+            return "MC_ACTIVE";
+          case 4:
+            return "DISCHARGING";
+          default:
+            return "UNKNOWN";
+        }
+      }
+
+      return {
+        showDialog,
+        data,
+        reconnect,
+        getStateString,
+      };
+    },
+  }).mount("#app");
+</script>

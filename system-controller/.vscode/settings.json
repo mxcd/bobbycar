@@ -1,0 +1,7 @@
+{
+  "files.associations": {
+    "*.ejs": "html",
+    "unordered_map": "cpp",
+    "initializer_list": "cpp"
+  }
+}
