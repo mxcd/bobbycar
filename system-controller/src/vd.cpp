@@ -15,6 +15,9 @@ float idleRamp = 2.0f;
 #define SPEED_DIFF_THREASHOLD 200.0f
 
 float limitSpeed(float speed) {
+  if(getVehicleState() != STATE::MC_ACTIVE) {
+    return 0.0f;
+  }
   if(speed < SPEED_LOWER_LIMIT) {
     return SPEED_LOWER_LIMIT;
   } else if(speed > SPEED_UPPER_LIMIT) {

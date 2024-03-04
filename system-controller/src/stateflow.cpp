@@ -2,13 +2,6 @@
 
 elapsedMillis stateTimer = 0;
 
-enum STATE {
-  IDLE,
-  PRECHARGING,
-  TS_ACTIVE,
-  MC_ACTIVE,
-  DISCHARGING
-};
 
 STATE vehicleState = IDLE;
 
@@ -100,4 +93,8 @@ void stateflowLoop() {
       }
       break;
   }
+}
+
+int getVehicleState() {
+  return vehicleState;
 }
