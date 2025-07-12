@@ -9,6 +9,9 @@ bool safetyCheck() {
   if(!isSteeringSafetyOk()) {
     return false;
   }
+  if(!isBatteryVoltageOk()) {
+    return false;
+  }
   return true;
 }
 

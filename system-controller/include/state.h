@@ -1,5 +1,6 @@
 #pragma once
 #include <ArduinoJson.h>
+#include "hover_serial.h"
 
 enum StateData {
   STATE_LOOP_COUNTER,
