@@ -83,3 +83,7 @@ String getKeyString(StateData key) {
 JsonDocument getStateData() {
   return stateData;
 }
+
+bool isBatteryVoltageOk() {
+  return Feedback.batVoltage > 4440; // 12 x 3,7 V
+}
