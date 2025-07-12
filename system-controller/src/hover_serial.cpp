@@ -35,10 +35,10 @@ typedef struct{
    uint16_t start;
    int16_t  cmd1;
    int16_t  cmd2;
-   int16_t  speedR_meas;
-   int16_t  speedL_meas;
-   int16_t  batVoltage;
-   int16_t  boardTemp;
+   int16_t  speedR_meas; // rpm
+   int16_t  speedL_meas; // rpm
+   int16_t  batVoltage; // 0.01 V, must be calibrated! https://github.com/EFeru/hoverboard-firmware-hack-FOC/wiki/Battery#chart_with_downwards_trend-calibration
+   int16_t  boardTemp; // °C
    uint16_t cmdLed;
    uint16_t checksum;
 } SerialFeedback;
