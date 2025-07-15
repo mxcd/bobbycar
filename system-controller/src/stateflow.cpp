@@ -1,18 +1,13 @@
 #include "stateflow.h"
 
 elapsedMillis stateTimer = 0;
+bool batteryVoltageOk = true;
 
 
 STATE vehicleState = IDLE;
 
 bool safetyCheck() {
-  if(!isSteeringSafetyOk()) {
-    return false;
-  }
-  if(!isBatteryVoltageOk()) {
-    return false;
-  }
-  return true;
+  return isSteeringSafetyOk() & batteryVoltageOk;
 }
 
 void enterIdleState() {
@@ -89,6 +84,7 @@ void stateflowLoop() {
         enterDischargeState();
         break;
       }
+      batteryVoltageOk = isBatteryVoltageOk();
       break;
     case DISCHARGING:
       if(stateTimer > 5000) {
