@@ -9,8 +9,7 @@ enum STATE {
   IDLE,
   PRECHARGING,
   TS_ACTIVE,
-  MC_ACTIVE,
-  DISCHARGING
+  MC_ACTIVE
 };
 
 void stateflowSetup();
