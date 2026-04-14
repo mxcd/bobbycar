@@ -1,13 +1,14 @@
 #include "stateflow.h"
+#include "safety.h"
+
 
 elapsedMillis stateTimer = 0;
-bool batteryVoltageOk = true;
-
+elapsedMillis undervoltageTimer = 0;
 
 STATE vehicleState = IDLE;
 
 bool safetyCheck() {
-  return isSteeringSafetyOk() & batteryVoltageOk;
+  return isSteeringSafetyOk() && isBatteryVoltageOk();
 }
 
 void enterIdleState() {
@@ -15,7 +16,6 @@ void enterIdleState() {
   vehicleState = IDLE;
   setState(VEHICLE_STATE, vehicleState);
   disablePrechargeRelay();
-  disableMotorControllerButton();
   disableScOk();
 }
 
@@ -35,17 +35,9 @@ void enterTsActiveState() {
 
 void enterMcActiveState() {
   stateTimer = 0;
+  undervoltageTimer = 0;
   vehicleState = MC_ACTIVE;
   setState(VEHICLE_STATE, vehicleState);
-  disableMotorControllerButton();
-}
-
-void enterDischargeState() {
-  stateTimer = 0;
-  vehicleState = DISCHARGING;
-  setState(VEHICLE_STATE, vehicleState);
-  disablePrechargeRelay();
-  disableScOk();
 }
 
 void stateflowSetup() {
@@ -55,40 +47,39 @@ void stateflowSetup() {
 void stateflowLoop() {
   switch(vehicleState) {
     case IDLE:
-      if(safetyCheck()) {
+      if(isSteeringStartupCheckOk() && !isSteeringPanic() && isBatteryVoltageOk()) {
         enterPrechargeState();
       }
       break;
     case PRECHARGING:
       if(!safetyCheck()) {
-        enterDischargeState();
+        enterIdleState();
         break;
-      } 
+      }
       if(stateTimer > 2000) {
         enterTsActiveState();
       }
       break;
     case TS_ACTIVE:
       if(!safetyCheck()) {
-        enterDischargeState();
+        enterIdleState();
         break;
       }
       if (stateTimer > 500) {
         enterMcActiveState();
-      } else if(stateTimer > 250) {
-        enableMotorControllerButton();
       }
       break;
     case MC_ACTIVE:
-      if(!safetyCheck()) {
-        enterDischargeState();
-        break;
-      }
-      batteryVoltageOk = isBatteryVoltageOk();
-      break;
-    case DISCHARGING:
-      if(stateTimer > 5000) {
-        enterIdleState();
+      // Stay in MC_ACTIVE regardless of steering panic — motor commands
+      // are gated by throttle value which holds last known good value.
+      // Undervoltage: vd.cpp zeroes current immediately via isBatteryVoltageOk(),
+      // then we open the relay after 1 second of continuous undervoltage.
+      if(!isBatteryVoltageOk()) {
+        if (undervoltageTimer > 1000) {
+          enterIdleState();
+        }
+      } else {
+        undervoltageTimer = 0;
       }
       break;
   }

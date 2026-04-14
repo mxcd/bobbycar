@@ -2,8 +2,9 @@
 
 #include "state.h"
 #include "steering.h"
-#include "hover_serial.h"
+#include "vesc_serial.h"
 #include "stateflow.h"
+#include "safety.h"
 
 void vdSetup();
 void vdLoop();

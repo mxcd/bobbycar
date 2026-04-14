@@ -4,8 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
-    <title>BobbyCar State</title>
-    <meta name="description" content="Building and signing JWTs" />
+    <title>BobbyCar Telemetry</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 
     <style>
       .boolDisplay {
@@ -18,6 +18,10 @@
       }
       .boolDisplayFalse {
         background-color: red;
+      }
+      .chart-container {
+        position: relative;
+        height: 300px;
       }
     </style>
   </head>
@@ -40,17 +44,18 @@
   <main class="container" id="app">
     <section id="State">
       <h2>State</h2>
-      <p>State information</p>
       <button @click="reconnect">Reconnect</button>
       <div>Main Loop #{{ data.loopCounter }}</div>
       <table>
         <tr>
-          <th>DeadManSwitch</th>
+          <th>DMS</th>
           <th>ACC</th>
           <th>BRK</th>
-          <th>Steering Startup</th>
-          <th>Steering Panic!</th>
-          <th>Steering Watchdog</th>
+          <th>Startup OK</th>
+          <th>Panic!</th>
+          <th>Watchdog</th>
+          <th>Throttle</th>
+          <th>Current Cmd</th>
         </tr>
         <tr>
           <td>
@@ -79,21 +84,18 @@
             ></div>
           </td>
           <td><div>{{ data.steeringWatchdogIndex }}</div></td>
+          <td><div>{{ data.steeringThrottle || 0 }} / 255 ({{ ((data.steeringThrottle || 0) / 255 * 100).toFixed(0) }}%)</div></td>
+          <td><div>{{ ((data.vdCurrentRequestLeft || 0) / 1000).toFixed(1) }} A</div></td>
         </tr>
       </table>
       <hr />
       <table>
         <tr>
-          <th>Relay MC EN</th>
           <th>Relay Precharge</th>
           <th>Relay SC OK</th>
+          <th>Battery OK</th>
         </tr>
         <tr>
-          <td>
-            <div
-              :class="[`boolDisplay`, data.relayMcEn ? `boolDisplayTrue` : `boolDisplayFalse`]"
-            ></div>
-          </td>
           <td>
             <div
               :class="[`boolDisplay`, data.relayPrecharge ? `boolDisplayTrue` : `boolDisplayFalse`]"
@@ -104,44 +106,109 @@
               :class="[`boolDisplay`, data.relayScOk ? `boolDisplayTrue` : `boolDisplayFalse`]"
             ></div>
           </td>
+          <td>
+            <div
+              :class="[`boolDisplay`, data.batteryOk ? `boolDisplayTrue` : `boolDisplayFalse`]"
+            ></div>
+          </td>
         </tr>
       </table>
     </section>
     <hr />
-    <section id="Foo">
-      <!-- <details> -->
-      <h2>State</h2>
+    <section id="VescState">
+      <h2>VESC</h2>
       <h3>Current state: {{ getStateString(data.vehicleState) }}</h3>
+      <h4>Commands</h4>
+      <table>
+        <tr>
+          <th>Cmd Left</th>
+          <th>Cmd Right</th>
+        </tr>
+        <tr>
+          <td>{{ ((data.vdCurrentRequestLeft || 0) / 1000).toFixed(1) }} A</td>
+          <td>{{ ((data.vdCurrentRequestRight || 0) / 1000).toFixed(1) }} A</td>
+        </tr>
+      </table>
+      <h4>Actual (from VESC)</h4>
+      <table>
+        <tr>
+          <th></th>
+          <th>Motor Current</th>
+          <th>ERPM</th>
+        </tr>
+        <tr>
+          <td>Left</td>
+          <td>{{ (data.vdMotorCurrentLeft || 0).toFixed(1) }} A</td>
+          <td>{{ data.vdErpmLeft || 0 }}</td>
+        </tr>
+        <tr>
+          <td>Right</td>
+          <td>{{ (data.vdMotorCurrentRight || 0).toFixed(1) }} A</td>
+          <td>{{ data.vdErpmRight || 0 }}</td>
+        </tr>
+      </table>
       <table>
         <tr>
           <th>DC Voltage</th>
-          <th>Speed Request Left</th>
-          <th>Speed Left</th>
-          <th>Speed Request Right</th>
-          <th>Speed Right</th>
+          <th>Input Current</th>
+          <th>Duty</th>
+          <th>FET Temp</th>
+          <th>Fault</th>
         </tr>
         <tr>
-          <td>{{ data.vdBatteryVoltage }} V</td>
-          <td>{{ data.vdSpeedRequestLeft }}</td>
-          <td>{{ data.vdSpeedLeft }} rpm</td>
-          <td>{{ data.vdSpeedRequestRight }}</td>
-          <td>{{ data.vdSpeedRight }} rpm</td>
+          <td>{{ (data.vdBatteryVoltage || 0).toFixed(1) }} V</td>
+          <td>{{ (data.vdInputCurrent || 0).toFixed(1) }} A</td>
+          <td>{{ ((data.vdDutyCycle || 0) * 100).toFixed(1) }} %</td>
+          <td>{{ (data.vdFetTemp || 0).toFixed(1) }} &deg;C</td>
+          <td>{{ data.vdFaultCode || 0 }}</td>
         </tr>
       </table>
     </section>
-    <dialog open v-if="showDialog">
-      <article>
-        <h2>Hello</h2>
-        <p>Some Dialog</p>
-
-        <footer>
-          <button @click="showDialog=false" className="secondary">
-            Cancel
-          </button>
-          <button @click="showDialog=false">Save</button>
-        </footer>
-      </article>
-    </dialog>
+    <hr />
+    <section id="UartIo">
+      <h2>VESC UART I/O</h2>
+      <table>
+        <tr>
+          <th>TX Total</th>
+          <th>RX Total</th>
+          <th>Packets OK</th>
+          <th>CRC Fails</th>
+          <th>End Byte Fails</th>
+          <th>GET_VALUES OK</th>
+          <th>Last Len</th>
+          <th>Last Cmd</th>
+          <th>Computed CRC</th>
+          <th>Received CRC</th>
+        </tr>
+        <tr>
+          <td>{{ data.vdVescTxBytes || 0 }} bytes</td>
+          <td>{{ data.vdVescRxBytes || 0 }} bytes</td>
+          <td>{{ data.vdVescRxPacketsOk || 0 }}</td>
+          <td>{{ data.vdVescRxCrcFails || 0 }}</td>
+          <td>{{ data.vdVescRxEndByteFails || 0 }}</td>
+          <td>{{ data.vdVescRxGetValuesOk || 0 }}</td>
+          <td>{{ data.vdVescRxLastLen || 0 }}</td>
+          <td>0x{{ (data.vdVescRxLastCmd || 0).toString(16).padStart(2, '0') }}</td>
+          <td>0x{{ (data.vdVescRxComputedCrc || 0).toString(16).padStart(4, '0') }}</td>
+          <td>0x{{ (data.vdVescRxReceivedCrc || 0).toString(16).padStart(4, '0') }}</td>
+        </tr>
+      </table>
+      <div class="chart-container">
+        <canvas id="uartChart"></canvas>
+      </div>
+    </section>
+    <hr />
+    <section id="CurrentLog">
+      <h2>Current Log</h2>
+      <textarea id="logBox" readonly rows="12" style="width:100%; font-family:monospace; font-size:12px;" :value="logText"></textarea>
+    </section>
+    <hr />
+    <section id="CurrentPlot">
+      <h2>Current</h2>
+      <div class="chart-container">
+        <canvas id="currentChart"></canvas>
+      </div>
+    </section>
   </main>
   <script src="js/minimal-theme-switcher.js"></script>
   <script src="js/modal.js"></script>
@@ -150,19 +217,173 @@
   import {
     createApp,
     ref,
-    watch,
     onMounted,
-    reactive,
   } from "./js/vue.esm-browser.prod.js";
+
+  const PLOT_POINTS = 200;
 
   createApp({
     setup() {
-      const showDialog = ref(false);
-
       const data = ref({
         loopCounter: 0,
         vehicleState: -1,
       });
+
+      const logText = ref("");
+      const LOG_MAX_LINES = 200;
+      let logLines = [];
+
+      const historyCmdLeft = [];
+      const historyCmdRight = [];
+      const historyActualLeft = [];
+      const historyActualRight = [];
+      const historyErpmLeft = [];
+      const historyErpmRight = [];
+      const labels = [];
+      let chart = null;
+      let sampleIndex = 0;
+
+      const historyTxRate = [];
+      const historyRxRate = [];
+      const uartLabels = [];
+      let uartChart = null;
+      let uartSampleIndex = 0;
+      let prevTxBytes = null;
+      let prevRxBytes = null;
+
+      function initChart() {
+        const ctx = document.getElementById("currentChart");
+        chart = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: "Cmd Left (A)",
+                data: historyCmdLeft,
+                borderColor: "#4fc3f7",
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.2,
+              },
+              {
+                label: "Cmd Right (A)",
+                data: historyCmdRight,
+                borderColor: "#ff8a65",
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.2,
+              },
+              {
+                label: "Actual Left (A)",
+                data: historyActualLeft,
+                borderColor: "#66bb6a",
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.2,
+                borderDash: [5, 3],
+              },
+              {
+                label: "Actual Right (A)",
+                data: historyActualRight,
+                borderColor: "#ab47bc",
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.2,
+                borderDash: [5, 3],
+              },
+              {
+                label: "RPM Left",
+                data: historyErpmLeft,
+                borderColor: "#ffd54f",
+                borderWidth: 1.5,
+                pointRadius: 0,
+                tension: 0.2,
+                yAxisID: "y1",
+              },
+              {
+                label: "RPM Right",
+                data: historyErpmRight,
+                borderColor: "#e0e0e0",
+                borderWidth: 1.5,
+                pointRadius: 0,
+                tension: 0.2,
+                yAxisID: "y1",
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            scales: {
+              x: {
+                display: false,
+              },
+              y: {
+                position: "left",
+                title: { display: true, text: "Current (A)" },
+                suggestedMin: -12,
+                suggestedMax: 25,
+              },
+              y1: {
+                position: "right",
+                title: { display: true, text: "ERPM" },
+                grid: { drawOnChartArea: false },
+              },
+            },
+            plugins: {
+              legend: {
+                position: "top",
+              },
+            },
+          },
+        });
+      }
+
+      function initUartChart() {
+        const ctx = document.getElementById("uartChart");
+        uartChart = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels: uartLabels,
+            datasets: [
+              {
+                label: "TX (bytes/update)",
+                data: historyTxRate,
+                borderColor: "#ef5350",
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.2,
+              },
+              {
+                label: "RX (bytes/update)",
+                data: historyRxRate,
+                borderColor: "#42a5f5",
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.2,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            scales: {
+              x: { display: false },
+              y: {
+                position: "left",
+                title: { display: true, text: "Bytes" },
+                suggestedMin: 0,
+              },
+            },
+            plugins: {
+              legend: { position: "top" },
+            },
+          },
+        });
+      }
 
       let websocketConnection = null;
 
@@ -170,19 +391,70 @@
         if (websocketConnection) {
           websocketConnection.close();
         }
-        console.log("Reconnecting websocket");
         websocketConnection = new WebSocket(
           "ws://" + document.location.host + "/ws"
         );
-        websocketConnection.onopen = function (event) {
-          console.log("Websocket connected");
-        };
         websocketConnection.onmessage = function (event) {
           data.value = JSON.parse(event.data);
+
+          const cmdLeft = (data.value.vdCurrentRequestLeft || 0) / 1000;
+          const cmdRight = (data.value.vdCurrentRequestRight || 0) / 1000;
+          const actualLeft = data.value.vdMotorCurrentLeft || 0;
+          const actualRight = data.value.vdMotorCurrentRight || 0;
+          const erpmLeft = data.value.vdErpmLeft || 0;
+          const erpmRight = data.value.vdErpmRight || 0;
+
+          historyCmdLeft.push(cmdLeft);
+          historyCmdRight.push(cmdRight);
+          historyActualLeft.push(actualLeft);
+          historyActualRight.push(actualRight);
+          historyErpmLeft.push(erpmLeft);
+          historyErpmRight.push(erpmRight);
+          labels.push(sampleIndex++);
+
+          if (historyCmdLeft.length > PLOT_POINTS) {
+            historyCmdLeft.shift();
+            historyCmdRight.shift();
+            historyActualLeft.shift();
+            historyActualRight.shift();
+            historyErpmLeft.shift();
+            historyErpmRight.shift();
+            labels.shift();
+          }
+
+          const ts = new Date().toLocaleTimeString("de", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit", fractionalSecondDigits: 1 });
+          const line = `${ts}  cmd L: ${cmdLeft.toFixed(1).padStart(6)} A  cmd R: ${cmdRight.toFixed(1).padStart(6)} A  act L: ${actualLeft.toFixed(1).padStart(6)} A  act R: ${actualRight.toFixed(1).padStart(6)} A  rpm L: ${String(erpmLeft).padStart(6)}  rpm R: ${String(erpmRight).padStart(6)}`;
+          logLines.push(line);
+          if (logLines.length > LOG_MAX_LINES) logLines.shift();
+          logText.value = logLines.join("\n");
+          const logBox = document.getElementById("logBox");
+          if (logBox) logBox.scrollTop = logBox.scrollHeight;
+
+          const txBytes = data.value.vdVescTxBytes || 0;
+          const rxBytes = data.value.vdVescRxBytes || 0;
+          const txDelta = prevTxBytes !== null ? txBytes - prevTxBytes : 0;
+          const rxDelta = prevRxBytes !== null ? rxBytes - prevRxBytes : 0;
+          prevTxBytes = txBytes;
+          prevRxBytes = rxBytes;
+
+          historyTxRate.push(txDelta);
+          historyRxRate.push(rxDelta);
+          uartLabels.push(uartSampleIndex++);
+
+          if (historyTxRate.length > PLOT_POINTS) {
+            historyTxRate.shift();
+            historyRxRate.shift();
+            uartLabels.shift();
+          }
+
+          if (chart) chart.update();
+          if (uartChart) uartChart.update();
         };
       }
 
       onMounted(() => {
+        initChart();
+        initUartChart();
         reconnect();
       });
 
@@ -196,16 +468,14 @@
             return "TS_ACTIVE";
           case 3:
             return "MC_ACTIVE";
-          case 4:
-            return "DISCHARGING";
           default:
             return "UNKNOWN";
         }
       }
 
       return {
-        showDialog,
         data,
+        logText,
         reconnect,
         getStateString,
       };
