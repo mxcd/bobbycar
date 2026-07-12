@@ -9,8 +9,7 @@
 float deratingFactor = 1.0;
 
 bool isBatteryVoltageOk() {
-  ArduinoJson::V703PB2::JsonDocument state = getStateData();
-  float batteryVoltage = state[getKeyString(VD_BATTERY_VOLTAGE)].as<float>();
+  float batteryVoltage = getTelemetry()->vd_battery_voltage;
   // Allow startup before first telemetry reading
   if (batteryVoltage == 0.0f) {
     setState(BATTERY_OK, true);
@@ -26,13 +25,12 @@ void safetySetup() {
 }
 
 void safetyLoop() {
-  ArduinoJson::V703PB2::JsonDocument state = getStateData();
-  int batteryVoltage = state[getKeyString(VD_BATTERY_VOLTAGE)].as<int>();
+  float batteryVoltage = getTelemetry()->vd_battery_voltage;
   if (batteryVoltage > UPPER_BATTERY_DERATING_VOLTAGE) {
     deratingFactor = 1.0; // no derating
     setState(VD_DERATING_FACTOR, deratingFactor);
   } else {
-    float factor = (float)(batteryVoltage - LOWER_BATTERY_DERATING_VOLTAGE) /
+    float factor = (batteryVoltage - LOWER_BATTERY_DERATING_VOLTAGE) /
                     (UPPER_BATTERY_DERATING_VOLTAGE - LOWER_BATTERY_DERATING_VOLTAGE);
     if (factor < 0.0) {
       factor = 0.0; // no derating below lower limit

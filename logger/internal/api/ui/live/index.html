@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>bobbycar — live</title>
+  <link rel="stylesheet" href="../theme.css">
+  <link rel="icon" href="../icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#14171c">
+  <script>
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "dark";
+    if (document.documentElement.dataset.theme === "light")
+      document.querySelector('meta[name="theme-color"]').content = "#f2f4f7";
+  </script>
+  <script src="./js/chart.umd.min.js"></script>
+  <style>
+    .statestrip {
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+      padding: 16px 0 4px;
+    }
+    .statestrip .state {
+      font-size: 20px; font-weight: 700; letter-spacing: -0.01em;
+      font-variant-numeric: tabular-nums;
+    }
+    .statestrip .state.active { color: var(--ok); }
+    .statestrip .metric { color: var(--text-dim); font-size: 14px; }
+    .statestrip .metric b { color: var(--text); font-weight: 600; }
+    .statestrip button { margin-left: auto; }
+    .chart-panel { padding: 12px; }
+    .chart-container { position: relative; height: 300px; }
+    #logBox {
+      width: 100%; resize: vertical;
+      font: 12px/1.5 var(--mono); color: var(--text-dim);
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-s); padding: 12px 14px;
+    }
+    @media (max-width: 700px) { .chart-container { height: 230px; } }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="wordmark" href="../">bobbycar</a>
+    <nav class="topnav">
+      <a href="../">logs</a>
+      <a class="active" href="./">live</a>
+    </nav>
+    <button id="themeToggle" class="theme-toggle" aria-label="toggle light/dark mode"></button>
+    <a href="#" class="aux" onclick="fetch('../api/logout',{method:'POST'}).then(()=>location.href='../login.html');return false">logout</a>
+  </header>
+  <main id="app">
+    <div class="statestrip">
+      <span :class="['state', data.vehicleState === 3 ? 'active' : '']">{{ getStateString(data.vehicleState) }}</span>
+      <span class="metric"><b class="num">{{ (data.vdBatteryVoltage || 0).toFixed(1) }} V</b> pack</span>
+      <span class="metric">loop <span class="num">#{{ data.loopCounter }}</span></span>
+      <button @click="reconnect">Reconnect</button>
+    </div>
+
+    <section>
+      <h2>Steering</h2>
+      <div class="pills" style="margin-bottom: 12px">
+        <span :class="['pill', data.steeringDeadManSwitchPressed ? 'on' : '']">DMS</span>
+        <span :class="['pill', data.steeringAccelerationCommand ? 'on' : '']">⚑ flag</span>
+        <span :class="['pill', data.steeringBrakeCommand ? 'on' : '']">brake</span>
+        <span :class="['pill', data.steeringStartupCheckOk ? 'on' : '']">startup ok</span>
+        <span :class="['pill alert', data.steeringPanic ? 'on' : '']">panic</span>
+      </div>
+      <div class="panel table-wrap">
+        <table>
+          <tr>
+            <th>Throttle</th><th>Watchdog</th><th>Cmd left</th><th>Cmd right</th>
+          </tr>
+          <tr>
+            <td class="num">{{ data.steeringThrottle || 0 }} / 255 ({{ ((data.steeringThrottle || 0) / 255 * 100).toFixed(0) }}%)</td>
+            <td class="num">#{{ data.steeringWatchdogIndex }} · {{ data.steeringTimeSinceLastWatchdogMessage }} ms</td>
+            <td class="num">{{ ((data.vdCurrentRequestLeft || 0) / 1000).toFixed(1) }} A</td>
+            <td class="num">{{ ((data.vdCurrentRequestRight || 0) / 1000).toFixed(1) }} A</td>
+          </tr>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>Drive</h2>
+      <div class="pills" style="margin-bottom: 12px">
+        <span :class="['pill', data.relayPrecharge ? 'on' : '']">precharge</span>
+        <span :class="['pill', data.relayScOk ? 'on' : '']">SC OK</span>
+        <span :class="['pill', data.relayMcEn ? 'on' : '']">MC enable</span>
+        <span :class="['pill', data.batteryOk ? 'on' : '']">battery ok</span>
+      </div>
+      <div class="panel table-wrap" style="margin-bottom: 10px">
+        <table>
+          <tr><th></th><th>Motor current</th><th>ERPM</th></tr>
+          <tr><td>Left</td><td class="num">{{ (data.vdMotorCurrentLeft || 0).toFixed(1) }} A</td><td class="num">{{ data.vdErpmLeft || 0 }}</td></tr>
+          <tr><td>Right</td><td class="num">{{ (data.vdMotorCurrentRight || 0).toFixed(1) }} A</td><td class="num">{{ data.vdErpmRight || 0 }}</td></tr>
+        </table>
+      </div>
+      <div class="panel table-wrap">
+        <table>
+          <tr><th>DC voltage</th><th>Input current</th><th>Duty</th><th>FET temp</th><th>Fault</th></tr>
+          <tr>
+            <td class="num">{{ (data.vdBatteryVoltage || 0).toFixed(1) }} V</td>
+            <td class="num">{{ (data.vdInputCurrent || 0).toFixed(1) }} A</td>
+            <td class="num">{{ ((data.vdDutyCycle || 0) * 100).toFixed(1) }} %</td>
+            <td class="num">{{ (data.vdFetTemp || 0).toFixed(1) }} °C</td>
+            <td class="num">{{ data.vdFaultCode || 0 }}</td>
+          </tr>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>Current &amp; ERPM</h2>
+      <div class="panel chart-panel">
+        <div class="chart-container"><canvas id="currentChart"></canvas></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>VESC UART I/O</h2>
+      <div class="panel table-wrap" style="margin-bottom: 10px">
+        <table>
+          <tr>
+            <th>TX</th><th>RX</th><th>Packets OK</th><th>CRC fails</th><th>End-byte fails</th>
+            <th>GET_VALUES OK</th><th>Last len</th><th>Last cmd</th><th>CRC calc</th><th>CRC recv</th>
+          </tr>
+          <tr>
+            <td class="num">{{ data.vdVescTxBytes || 0 }} B</td>
+            <td class="num">{{ data.vdVescRxBytes || 0 }} B</td>
+            <td class="num">{{ data.vdVescRxPacketsOk || 0 }}</td>
+            <td class="num">{{ data.vdVescRxCrcFails || 0 }}</td>
+            <td class="num">{{ data.vdVescRxEndByteFails || 0 }}</td>
+            <td class="num">{{ data.vdVescRxGetValuesOk || 0 }}</td>
+            <td class="num">{{ data.vdVescRxLastLen || 0 }}</td>
+            <td class="num">0x{{ (data.vdVescRxLastCmd || 0).toString(16).padStart(2, '0') }}</td>
+            <td class="num">0x{{ (data.vdVescRxComputedCrc || 0).toString(16).padStart(4, '0') }}</td>
+            <td class="num">0x{{ (data.vdVescRxReceivedCrc || 0).toString(16).padStart(4, '0') }}</td>
+          </tr>
+        </table>
+      </div>
+      <div class="panel chart-panel">
+        <div class="chart-container"><canvas id="uartChart"></canvas></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Log</h2>
+      <textarea id="logBox" readonly rows="12" :value="logText"></textarea>
+    </section>
+  </main>
+  <nav class="tabbar">
+    <a href="../">Logs</a>
+    <a class="active" href="./">Live</a>
+  </nav>
+
+  <script type="module">
+    import { createApp, ref, onMounted } from "./js/vue.esm-browser.prod.js";
+
+    const PLOT_POINTS = 200;
+
+    // canvas colors mirror theme.css — keep in sync; series colors get
+    // darker equivalents in light mode (the originals wash out on white)
+    const chartTheme = () => document.documentElement.dataset.theme === "light"
+      ? { border: "#d5dae2", text: "#5b6570", series: { cmdL: "#0277bd", cmdR: "#e64a19", actL: "#2e7d32", actR: "#7b1fa2", rpmL: "#c49000", rpmR: "#616161", tx: "#c62828", rx: "#1565c0" } }
+      : { border: "#2c313a", text: "#9aa4b2", series: { cmdL: "#4fc3f7", cmdR: "#ff8a65", actL: "#66bb6a", actR: "#ab47bc", rpmL: "#ffd54f", rpmR: "#e0e0e0", tx: "#ef5350", rx: "#42a5f5" } };
+
+    const themeToggle = document.getElementById("themeToggle");
+    themeToggle.textContent = document.documentElement.dataset.theme === "light" ? "☾" : "☀";
+    themeToggle.onclick = () => {
+      localStorage.setItem("theme", document.documentElement.dataset.theme === "light" ? "dark" : "light");
+      location.reload(); // charts re-init with the new palette
+    };
+
+    createApp({
+      setup() {
+        const data = ref({
+          loopCounter: 0,
+          vehicleState: -1,
+        });
+
+        const logText = ref("");
+        const LOG_MAX_LINES = 200;
+        let logLines = [];
+
+        const historyCmdLeft = [];
+        const historyCmdRight = [];
+        const historyActualLeft = [];
+        const historyActualRight = [];
+        const historyErpmLeft = [];
+        const historyErpmRight = [];
+        const labels = [];
+        let chart = null;
+        let sampleIndex = 0;
+
+        const historyTxRate = [];
+        const historyRxRate = [];
+        const uartLabels = [];
+        let uartChart = null;
+        let uartSampleIndex = 0;
+        let prevTxBytes = null;
+        let prevRxBytes = null;
+
+        function baseOptions(extraScales) {
+          const t = chartTheme();
+          return {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            scales: {
+              x: { display: false },
+              ...extraScales(t),
+            },
+            plugins: {
+              legend: { position: "top", labels: { color: t.text, boxWidth: 18 } },
+            },
+          };
+        }
+
+        function initChart() {
+          const ctx = document.getElementById("currentChart");
+          chart = new Chart(ctx, {
+            type: "line",
+            data: {
+              labels: labels,
+              datasets: [
+                { label: "Cmd L (A)", data: historyCmdLeft, borderColor: chartTheme().series.cmdL, borderWidth: 2, pointRadius: 0, tension: 0.2 },
+                { label: "Cmd R (A)", data: historyCmdRight, borderColor: chartTheme().series.cmdR, borderWidth: 2, pointRadius: 0, tension: 0.2 },
+                { label: "Act L (A)", data: historyActualLeft, borderColor: chartTheme().series.actL, borderWidth: 2, pointRadius: 0, tension: 0.2, borderDash: [5, 3] },
+                { label: "Act R (A)", data: historyActualRight, borderColor: chartTheme().series.actR, borderWidth: 2, pointRadius: 0, tension: 0.2, borderDash: [5, 3] },
+                { label: "RPM L", data: historyErpmLeft, borderColor: chartTheme().series.rpmL, borderWidth: 1.5, pointRadius: 0, tension: 0.2, yAxisID: "y1" },
+                { label: "RPM R", data: historyErpmRight, borderColor: chartTheme().series.rpmR, borderWidth: 1.5, pointRadius: 0, tension: 0.2, yAxisID: "y1" },
+              ],
+            },
+            options: baseOptions(t => ({
+              y: {
+                position: "left",
+                title: { display: true, text: "Current (A)", color: t.text },
+                suggestedMin: -12, suggestedMax: 25,
+                grid: { color: t.border }, ticks: { color: t.text },
+              },
+              y1: {
+                position: "right",
+                title: { display: true, text: "ERPM", color: t.text },
+                grid: { drawOnChartArea: false }, ticks: { color: t.text },
+              },
+            })),
+          });
+        }
+
+        function initUartChart() {
+          const ctx = document.getElementById("uartChart");
+          uartChart = new Chart(ctx, {
+            type: "line",
+            data: {
+              labels: uartLabels,
+              datasets: [
+                { label: "TX (bytes/update)", data: historyTxRate, borderColor: chartTheme().series.tx, borderWidth: 2, pointRadius: 0, tension: 0.2 },
+                { label: "RX (bytes/update)", data: historyRxRate, borderColor: chartTheme().series.rx, borderWidth: 2, pointRadius: 0, tension: 0.2 },
+              ],
+            },
+            options: baseOptions(t => ({
+              y: {
+                position: "left",
+                title: { display: true, text: "Bytes", color: t.text },
+                suggestedMin: 0,
+                grid: { color: t.border }, ticks: { color: t.text },
+              },
+            })),
+          });
+        }
+
+        let websocketConnection = null;
+
+        function reconnect() {
+          if (websocketConnection) {
+            websocketConnection.close();
+          }
+          websocketConnection = new WebSocket(
+            (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws"
+          );
+          websocketConnection.onmessage = function (event) {
+            data.value = JSON.parse(event.data);
+
+            const cmdLeft = (data.value.vdCurrentRequestLeft || 0) / 1000;
+            const cmdRight = (data.value.vdCurrentRequestRight || 0) / 1000;
+            const actualLeft = data.value.vdMotorCurrentLeft || 0;
+            const actualRight = data.value.vdMotorCurrentRight || 0;
+            const erpmLeft = data.value.vdErpmLeft || 0;
+            const erpmRight = data.value.vdErpmRight || 0;
+
+            historyCmdLeft.push(cmdLeft);
+            historyCmdRight.push(cmdRight);
+            historyActualLeft.push(actualLeft);
+            historyActualRight.push(actualRight);
+            historyErpmLeft.push(erpmLeft);
+            historyErpmRight.push(erpmRight);
+            labels.push(sampleIndex++);
+
+            if (historyCmdLeft.length > PLOT_POINTS) {
+              historyCmdLeft.shift();
+              historyCmdRight.shift();
+              historyActualLeft.shift();
+              historyActualRight.shift();
+              historyErpmLeft.shift();
+              historyErpmRight.shift();
+              labels.shift();
+            }
+
+            const ts = new Date().toLocaleTimeString("de", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit", fractionalSecondDigits: 1 });
+            const line = `${ts}  cmd L: ${cmdLeft.toFixed(1).padStart(6)} A  cmd R: ${cmdRight.toFixed(1).padStart(6)} A  act L: ${actualLeft.toFixed(1).padStart(6)} A  act R: ${actualRight.toFixed(1).padStart(6)} A  rpm L: ${String(erpmLeft).padStart(6)}  rpm R: ${String(erpmRight).padStart(6)}`;
+            logLines.push(line);
+            if (logLines.length > LOG_MAX_LINES) logLines.shift();
+            logText.value = logLines.join("\n");
+            const logBox = document.getElementById("logBox");
+            if (logBox) logBox.scrollTop = logBox.scrollHeight;
+
+            const txBytes = data.value.vdVescTxBytes || 0;
+            const rxBytes = data.value.vdVescRxBytes || 0;
+            const txDelta = prevTxBytes !== null ? txBytes - prevTxBytes : 0;
+            const rxDelta = prevRxBytes !== null ? rxBytes - prevRxBytes : 0;
+            prevTxBytes = txBytes;
+            prevRxBytes = rxBytes;
+
+            historyTxRate.push(txDelta);
+            historyRxRate.push(rxDelta);
+            uartLabels.push(uartSampleIndex++);
+
+            if (historyTxRate.length > PLOT_POINTS) {
+              historyTxRate.shift();
+              historyRxRate.shift();
+              uartLabels.shift();
+            }
+
+            if (chart) chart.update();
+            if (uartChart) uartChart.update();
+          };
+        }
+
+        onMounted(() => {
+          initChart();
+          initUartChart();
+          reconnect();
+        });
+
+        function getStateString(state) {
+          switch (state) {
+            case 0: return "IDLE";
+            case 1: return "PRECHARGING";
+            case 2: return "TS_ACTIVE";
+            case 3: return "MC_ACTIVE";
+            default: return "NO DATA";
+          }
+        }
+
+        return {
+          data,
+          logText,
+          reconnect,
+          getStateString,
+        };
+      },
+    }).mount("#app");
+  </script>
+</body>
+</html>

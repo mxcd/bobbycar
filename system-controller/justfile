@@ -1,0 +1,13 @@
+build:
+    pio run
+
+upload:
+    pio run -t upload
+
+# flash over the air via the logger Pi (Nucleo on the Pi's USB, Pi reachable
+# via Tailscale); host = ssh/tailscale name of the Pi.
+# with dashboard auth enabled, export LOGGER_AUTH=user:pass
+ota host="logger": build
+    curl --fail-with-body ${LOGGER_AUTH:+-u "$LOGGER_AUTH"} -X POST \
+      --data-binary @.pio/build/nucleo_f767zi/firmware.bin \
+      "http://{{host}}:8090/api/ota/flash"

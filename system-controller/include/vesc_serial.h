@@ -4,12 +4,13 @@
 #include "state.h"
 
 // VESC command IDs (from vedderb/bldc datatypes.h)
-#define COMM_GET_VALUES         4
-#define COMM_SET_CURRENT        6
-#define COMM_SET_CURRENT_BRAKE  7
-#define COMM_SET_HANDBRAKE     10
-#define COMM_ALIVE             30
-#define COMM_FORWARD_CAN       34
+#define COMM_GET_VALUES            4
+#define COMM_SET_CURRENT           6
+#define COMM_SET_CURRENT_BRAKE     7
+#define COMM_SET_HANDBRAKE        10
+#define COMM_ALIVE                30
+#define COMM_FORWARD_CAN          34
+#define COMM_GET_VALUES_SELECTIVE 50
 
 // Configuration
 #define VESC_SERIAL_BAUD      115200
@@ -42,6 +43,11 @@ public:
   // Request telemetry from motor 1 (local) and motor 2 (CAN)
   void requestValues();
   void requestValuesCan(uint8_t canId = VESC_CAN_ID_MOTOR2);
+
+  // Selective telemetry (COMM_GET_VALUES_SELECTIVE) — smaller responses,
+  // field mask bits documented in docs/logging.md
+  void requestValuesSelective(uint32_t mask);
+  void requestValuesSelectiveCan(uint32_t mask, uint8_t canId = VESC_CAN_ID_MOTOR2);
 
   // Parsed telemetry (updated by receive())
   uint32_t rxByteCount;
@@ -86,6 +92,7 @@ private:
 
   void sendPacket(const uint8_t *payload, uint8_t len);
   void processGetValues(const uint8_t *payload, uint16_t len);
+  void processGetValuesSelective(const uint8_t *payload, uint16_t len);
 
   static int16_t  getInt16(const uint8_t *buf, int idx);
   static int32_t  getInt32(const uint8_t *buf, int idx);

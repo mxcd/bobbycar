@@ -1,0 +1,59 @@
+// Shared telemetry schema — single source of truth for:
+//   system-controller (nanopb, generated at PlatformIO build time)
+//   logger            (protoc-gen-go, `just gen`)
+//   telemetry-server  (protoc-gen-go, `just gen`)
+// Field numbers are stable IDs: append new fields, never renumber.
+// JSON names (camelCase) intentionally match the legacy JSON wire keys.
+syntax = "proto3";
+
+package bob;
+
+message Telemetry {
+  uint32 loop_counter = 1;
+  uint32 vehicle_state = 2;
+
+  // steering
+  bool steering_startup_check_ok = 10;
+  bool steering_dead_man_switch_pressed = 11;
+  bool steering_acceleration_command = 12;
+  bool steering_brake_command = 13;
+  bool steering_panic = 14;
+  uint32 steering_watchdog_index = 15;
+  uint32 steering_time_since_last_watchdog_message = 16;
+  uint32 steering_throttle = 17;
+
+  // relays & safety
+  bool relay_mc_en = 20;
+  bool relay_precharge = 21;
+  bool relay_sc_ok = 22;
+  bool battery_ok = 23;
+
+  // VESC shared (motor 1 response carries pack-level data)
+  float vd_battery_voltage = 30;
+  float vd_fet_temp = 31;
+  float vd_motor_temp = 32;
+  float vd_input_current = 33;
+  float vd_duty_cycle = 34;
+  uint32 vd_fault_code = 35;
+  float vd_derating_factor = 36;
+
+  // VESC per motor
+  int32 vd_erpm_left = 40;
+  int32 vd_erpm_right = 41;
+  float vd_motor_current_left = 42;
+  float vd_motor_current_right = 43;
+  int32 vd_current_request_left = 44;
+  int32 vd_current_request_right = 45;
+
+  // VESC UART diagnostics
+  uint32 vd_vesc_rx_bytes = 50;
+  uint32 vd_vesc_tx_bytes = 51;
+  uint32 vd_vesc_rx_packets_ok = 52;
+  uint32 vd_vesc_rx_crc_fails = 53;
+  uint32 vd_vesc_rx_end_byte_fails = 54;
+  uint32 vd_vesc_rx_get_values_ok = 55;
+  uint32 vd_vesc_rx_last_len = 56;
+  uint32 vd_vesc_rx_last_cmd = 57;
+  uint32 vd_vesc_rx_computed_crc = 58;
+  uint32 vd_vesc_rx_received_crc = 59;
+}

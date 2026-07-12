@@ -167,6 +167,22 @@ void VescSerial::requestValuesCan(uint8_t canId) {
   sendPacket(p, 3);
 }
 
+void VescSerial::requestValuesSelective(uint32_t mask) {
+  uint8_t p[5];
+  p[0] = COMM_GET_VALUES_SELECTIVE;
+  putInt32(p, 1, (int32_t)mask);
+  sendPacket(p, 5);
+}
+
+void VescSerial::requestValuesSelectiveCan(uint32_t mask, uint8_t canId) {
+  uint8_t p[7];
+  p[0] = COMM_FORWARD_CAN;
+  p[1] = canId;
+  p[2] = COMM_GET_VALUES_SELECTIVE;
+  putInt32(p, 3, (int32_t)mask);
+  sendPacket(p, 7);
+}
+
 // ---------- COMM_GET_VALUES response parsing ----------
 // Field offsets within payload (byte 0 = COMM_GET_VALUES):
 //   [1..2]   fetTemp           int16 / 10.0   (°C)
@@ -218,6 +234,70 @@ void VescSerial::processGetValues(const uint8_t *payload, uint16_t len) {
     setState(VD_INPUT_CURRENT, inputCurrent);
     setState(VD_DUTY_CYCLE, dutyCycle);
     setState(VD_FAULT_CODE, faultCode);
+  }
+}
+
+// ---------- COMM_GET_VALUES_SELECTIVE response parsing ----------
+// Response: [50][mask uint32][fields in mask-bit order]. Field widths per
+// mask bit follow the COMM_GET_VALUES field order (vedderb/bldc commands.c).
+// Parsing is driven by the mask ECHOED by the VESC, not by what we requested,
+// so a firmware that serves fewer/more bits stays correctly aligned.
+// Full bit table: docs/logging.md
+
+void VescSerial::processGetValuesSelective(const uint8_t *payload, uint16_t len) {
+  if (len < 5) return;
+  uint32_t mask = (uint32_t)getInt32(payload, 1);
+  uint16_t idx = 5;
+  static const uint8_t widths[] = {2, 2, 4, 4, 4, 4, 2, 4, 2, 4, 4,
+                                   4, 4, 4, 4, 1, 4, 1, 6, 4, 4, 1};
+
+  float fet = 0, motor = 0, current = 0, inCurrent = 0, duty = 0, voltage = 0;
+  int32_t erpm = 0;
+  uint8_t fault = 0, ctrlId = 0;
+  bool hasCtrlId = false;
+
+  for (uint8_t bit = 0; bit < sizeof(widths); bit++) {
+    if (!(mask & ((uint32_t)1 << bit))) continue;
+    if (idx + widths[bit] > len) return; // truncated response
+    switch (bit) {
+      case 0:  fet       = getInt16(payload, idx) / 10.0f;   break;
+      case 1:  motor     = getInt16(payload, idx) / 10.0f;   break;
+      case 2:  current   = getInt32(payload, idx) / 100.0f;  break;
+      case 3:  inCurrent = getInt32(payload, idx) / 100.0f;  break;
+      case 6:  duty      = getInt16(payload, idx) / 1000.0f; break;
+      case 7:  erpm      = getInt32(payload, idx);           break;
+      case 8:  voltage   = getInt16(payload, idx) / 10.0f;   break;
+      case 15: fault     = payload[idx];                     break;
+      case 17: ctrlId    = payload[idx]; hasCtrlId = true;   break;
+      default: break; // requested by someone else / not consumed — skip
+    }
+    idx += widths[bit];
+  }
+  if (!hasCtrlId) return; // cannot route to a motor without controller id
+
+  if (ctrlId == VESC_CAN_ID_MOTOR2) {
+    erpmMotor2 = erpm;
+    setState(VD_MOTOR_CURRENT_RIGHT, current);
+    setState(VD_ERPM_RIGHT, (int)erpm);
+  } else {
+    // Motor 1 (UART-connected) — also carries shared battery/thermal data
+    erpmMotor1 = erpm;
+    setState(VD_MOTOR_CURRENT_LEFT, current);
+    setState(VD_ERPM_LEFT, (int)erpm);
+
+    fetTemp      = fet;
+    motorTemp    = motor;
+    inputCurrent = inCurrent;
+    dutyCycle    = duty;
+    inputVoltage = voltage;
+    faultCode    = fault;
+
+    setState(VD_BATTERY_VOLTAGE, voltage);
+    setState(VD_FET_TEMP, fet);
+    setState(VD_MOTOR_TEMP, motor);
+    setState(VD_INPUT_CURRENT, inCurrent);
+    setState(VD_DUTY_CYCLE, duty);
+    setState(VD_FAULT_CODE, fault);
   }
 }
 
@@ -284,6 +364,10 @@ bool VescSerial::receive() {
           if (_rxBuf[0] == COMM_GET_VALUES) {
             rxGetValuesOk++;
             processGetValues(_rxBuf, _rxLen);
+            gotPacket = true;
+          } else if (_rxBuf[0] == COMM_GET_VALUES_SELECTIVE) {
+            rxGetValuesOk++;
+            processGetValuesSelective(_rxBuf, _rxLen);
             gotPacket = true;
           }
         } else {

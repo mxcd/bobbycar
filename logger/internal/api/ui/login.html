@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>bobbycar — login</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <meta name="theme-color" content="#14171c">
+  <script>
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "dark";
+    if (document.documentElement.dataset.theme === "light")
+      document.querySelector('meta[name="theme-color"]').content = "#f2f4f7";
+  </script>
+  <style>
+    body { display: flex; align-items: center; justify-content: center; min-height: 100dvh; }
+    form {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 28px; width: min(320px, calc(100vw - 32px));
+      display: grid; gap: 12px;
+    }
+    form .wordmark { margin-bottom: 6px; }
+    input { width: 100%; }
+    #error { color: var(--accent); font-size: 13px; min-height: 16px; margin: 0; }
+  </style>
+</head>
+<body>
+  <form id="form">
+    <span class="wordmark">bobbycar</span>
+    <input id="username" placeholder="username" autocomplete="username" autofocus>
+    <input id="password" type="password" placeholder="password" autocomplete="current-password">
+    <button type="submit" class="primary">Login</button>
+    <p id="error"></p>
+  </form>
+  <script>
+    document.getElementById("form").onsubmit = async event => {
+      event.preventDefault();
+      const response = await fetch("api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: document.getElementById("username").value,
+          password: document.getElementById("password").value,
+        }),
+      });
+      if (response.ok) location.href = "./";
+      else document.getElementById("error").textContent = "invalid credentials";
+    };
+  </script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "bobbycar",
+  "short_name": "bobbycar",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#1c1615",
+  "theme_color": "#c53929",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

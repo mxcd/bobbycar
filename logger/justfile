@@ -1,0 +1,41 @@
+gen:
+    protoc --proto_path=proto --proto_path=../proto \
+      --go_opt=Mlogfile.proto=github.com/mxcd/bob-e-car/logger/internal/pb \
+      --go_opt=Mtelemetry.proto=github.com/mxcd/bob-e-car/logger/internal/pb \
+      --go_out=paths=source_relative:internal/pb logfile.proto telemetry.proto
+
+build:
+    go build -o bin/logger ./cmd/logger
+    go build -o bin/simulator ./cmd/simulator
+
+# Raspberry Pi 2 (ARMv7, 32-bit OS); pure-Go sqlite, so no cross toolchain needed
+build-pi:
+    CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -o bin/logger-pi ./cmd/logger
+
+# Raspberry Pi 4 (64-bit OS)
+build-pi4:
+    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o bin/logger-pi4 ./cmd/logger
+
+deploy: build-pi
+    scp bin/logger-pi logger:/tmp/bob-logger
+    ssh logger 'sudo install -m 755 /tmp/bob-logger /usr/local/bin/bob-logger && sudo systemctl restart bob-logger'
+
+deploy-pi4: build-pi4
+    scp bin/logger-pi4 logger:/tmp/bob-logger
+    ssh logger 'sudo install -m 755 /tmp/bob-logger /usr/local/bin/bob-logger && sudo systemctl restart bob-logger'
+
+# install/update the systemd unit. deploy/bob-logger.service is the source of
+# truth: After=local-fs.target ONLY, so logging starts ~5s after power-on —
+# network/tailscale must never gate it
+install-service:
+    scp deploy/bob-logger.service logger:/tmp/bob-logger.service
+    ssh logger 'sudo install -m 644 /tmp/bob-logger.service /etc/systemd/system/bob-logger.service && sudo systemctl daemon-reload && sudo systemctl enable --now bob-logger'
+
+run:
+    go run ./cmd/logger
+
+sim:
+    go run ./cmd/simulator
+
+test:
+    go test ./...

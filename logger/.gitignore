@@ -1,0 +1,4 @@
+bin/
+logs/
+logs.sqlite
+.env

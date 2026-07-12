@@ -1,16 +1,22 @@
 package udp
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
 
+	"github.com/mxcd/bobbycar/internal/pb"
 	"github.com/mxcd/bobbycar/internal/server"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 type UdpServer struct {
 	UdpConnection *net.UDPConn
 }
+
+// protojson with EmitUnpopulated produces the same camelCase keys (incl.
+// zero values) the dashboard consumed from the legacy JSON firmware.
+var jsonMarshaler = protojson.MarshalOptions{EmitUnpopulated: true}
 
 func InitUdpServer(server *server.Server) (*UdpServer, error) {
 	// Define the UDP port to listen on
@@ -35,10 +41,20 @@ func InitUdpServer(server *server.Server) (*UdpServer, error) {
 				fmt.Println(err)
 				continue
 			}
+			data := buffer[:n]
 
-			jsonData := buffer[:n]
-			jsonObject := make(map[string]interface{})
-			err = json.Unmarshal(jsonData, &jsonObject)
+			// legacy JSON firmware — pass through unchanged
+			if n > 0 && data[0] == '{' {
+				server.WebsocketManager.Broadcast(data)
+				continue
+			}
+
+			telemetry := &pb.Telemetry{}
+			if err := proto.Unmarshal(data, telemetry); err != nil {
+				fmt.Println(err)
+				continue
+			}
+			jsonData, err := jsonMarshaler.Marshal(telemetry)
 			if err != nil {
 				fmt.Println(err)
 				continue

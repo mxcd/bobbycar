@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package logger;
+
+option go_package = "github.com/mxcd/bob-e-car/logger/internal/pb";
+
+// One record per UDP packet received from the system controller.
+// Written as varint-length-delimited stream (protodelim).
+message LogRecord {
+  // Receive time on the logger host (the system controller has no RTC).
+  uint64 timestamp_us = 1;
+  // Legacy flat state map (JSON-era firmware). JSON booleans stored as 0/1.
+  map<string, double> values = 2;
+  // Raw bob.Telemetry frame exactly as received (protobuf-era firmware).
+  // Exactly one of values/telemetry is set per record.
+  bytes telemetry = 3;
+}

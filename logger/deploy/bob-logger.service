@@ -1,0 +1,22 @@
+[Unit]
+Description=bob-e-car data logger
+# ORDERING: After=local-fs.target ONLY — never add network-online.target or
+# tailscale ordering here. The logger binds 0.0.0.0 and captures telemetry
+# ~5s after power-on; WiFi/Tailscale come up later and only matter for
+# remote access, never for logging. That 5s number is what counts in the car.
+After=local-fs.target
+
+[Service]
+ExecStart=/usr/local/bin/bob-logger
+User=mapa
+Environment=LOGGER_LOG_DIR=/var/lib/bob-logger/logs
+Environment=LOGGER_DB=/var/lib/bob-logger/logs.sqlite
+# dashboard credentials (LOGGER_USERNAME/LOGGER_PASSWORD), not in the repo
+EnvironmentFile=-/etc/bob-logger.env
+StateDirectory=bob-logger
+StateDirectoryMode=0755
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

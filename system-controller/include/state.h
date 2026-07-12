@@ -1,5 +1,6 @@
 #pragma once
-#include <ArduinoJson.h>
+#include <Arduino.h>
+#include "telemetry.pb.h"
 
 enum StateData {
   STATE_LOOP_COUNTER,
@@ -41,10 +42,10 @@ enum StateData {
   VD_VESC_RX_RECEIVED_CRC
 };
 
-JsonDocument getStateData();
-void stateSetup();
+// The telemetry struct IS the vehicle state store — encoded as-is onto the wire.
+bob_Telemetry* getTelemetry();
 
-String getKeyString(StateData key);
+void stateSetup();
 void setState(StateData key, uint8_t value);
 void setState(StateData key, uint32_t value);
 void setState(StateData key, int value);

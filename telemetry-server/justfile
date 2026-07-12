@@ -1,2 +1,7 @@
 air:
   air -c .air.toml
+
+gen:
+  protoc --proto_path=../proto \
+    --go_opt=Mtelemetry.proto=github.com/mxcd/bobbycar/internal/pb \
+    --go_out=paths=source_relative:internal/pb telemetry.proto

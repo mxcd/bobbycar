@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>bobbycar</title>
+  <link rel="stylesheet" href="theme.css">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#14171c">
+  <script>
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "dark";
+    if (document.documentElement.dataset.theme === "light")
+      document.querySelector('meta[name="theme-color"]').content = "#f2f4f7";
+  </script>
+  <script src="plotly.min.js"></script>
+  <style>
+    #plot { width: 100%; height: 520px; }
+    #saveMsg, #plotInfo { font-size: 13px; color: var(--text-dim); }
+    #otaOut {
+      white-space: pre-wrap; font: 12px/1.5 var(--mono); color: var(--text-dim);
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-s); padding: 12px 14px; margin: 12px 0 0;
+      max-height: 300px; overflow-y: auto;
+    }
+    tr.log-row { cursor: pointer; }
+    tr.log-row:hover td { background: var(--hover); }
+    tr.selected td { background: var(--selected); }
+    .tiles {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+    }
+    .tile {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      min-width: 0;
+    }
+    .tile .label {
+      display: flex; align-items: center; gap: 7px;
+      font-size: 11.5px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--text-dim);
+    }
+    .tile .value {
+      margin-top: 6px;
+      font-size: 18px; font-weight: 650;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .tile .sub {
+      margin-top: 2px; min-height: 18px;
+      font-size: 12.5px; color: var(--text-dim);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    @media (max-width: 700px) { #plot { height: 380px; } }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="wordmark" href="./">bobbycar</a>
+    <nav class="topnav">
+      <a class="active" href="./">logs</a>
+      <a href="live/">live</a>
+    </nav>
+    <button id="themeToggle" class="theme-toggle" aria-label="toggle light/dark mode"></button>
+    <a href="#" id="logout" class="aux" style="display:none">logout</a>
+  </header>
+  <main>
+    <div class="tiles">
+      <div class="tile"><div class="label"><span id="connDot" class="dot"></span>dashboard</div><div class="value" id="connText">–</div><div class="sub" id="connSub"></div></div>
+      <div class="tile"><div class="label"><span id="rxDot" class="dot"></span>stream</div><div class="value" id="rxText">–</div><div class="sub" id="rxSub"></div></div>
+      <div class="tile"><div class="label"><span id="stateDot" class="dot"></span>state</div><div class="value" id="stateText">–</div><div class="sub" id="stateSub"></div></div>
+      <div class="tile"><div class="label"><span id="battDot" class="dot"></span>battery</div><div class="value" id="battText">–</div><div class="sub" id="battSub"></div></div>
+      <div class="tile"><div class="label"><span id="recDot" class="dot"></span>recording</div><div class="value" id="recText">–</div><div class="sub" id="recSub"></div></div>
+    </div>
+    <section>
+      <h2>Trigger</h2>
+      <div class="row">
+        <label>Mode</label>
+        <select id="mode">
+          <option value="dms">DMS (dead man switch)</option>
+          <option value="always">Always</option>
+        </select>
+        <label>Pre/post buffer (s)</label>
+        <input id="bufferSeconds" type="number" min="1" max="600" style="width:80px">
+        <button id="save" class="primary">Save</button>
+        <span id="saveMsg"></span>
+      </div>
+    </section>
+    <section>
+      <div class="row" style="justify-content: space-between; margin-bottom: 12px">
+        <h2 style="margin: 0">Logs</h2>
+        <button id="deleteAll" class="danger">Delete all</button>
+      </div>
+      <div class="panel table-wrap">
+        <table>
+          <thead>
+            <tr><th>File</th><th>Start</th><th>Duration</th><th class="num">Records</th><th class="num">Size</th><th>Trigger</th><th></th><th></th></tr>
+          </thead>
+          <tbody id="logRows"><tr><td colspan="8" class="dim">loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    <section>
+      <h2>Firmware OTA (system controller)</h2>
+      <div class="row">
+        <button id="otaProbe">Probe ST-LINK</button>
+        <input id="otaFile" type="file" accept=".bin">
+        <button id="otaFlash" class="danger">Flash</button>
+      </div>
+      <pre id="otaOut" style="display:none"></pre>
+    </section>
+    <section id="viewer" style="display:none">
+      <h2 id="viewerTitle">Log</h2>
+      <div class="panel" style="padding: 8px"><div id="plot"></div></div>
+      <div class="row" style="margin-top:10px">
+        <span id="plotInfo"></span>
+        <button id="resetZoom">Reset zoom</button>
+        <span class="dim" style="font-size:13px">Zoom/pan reloads the window at full available detail. Tap legend entries to toggle channels.</span>
+      </div>
+    </section>
+  </main>
+  <nav class="tabbar">
+    <a class="active" href="./">Logs</a>
+    <a href="live/">Live</a>
+  </nav>
+
+  <dialog id="deleteAllDialog">
+    <strong>Delete all logs?</strong>
+    <p class="dim" id="deleteAllText">This permanently removes all log files and their metadata. An active recording is kept.</p>
+    <div class="row">
+      <button id="deleteAllCancel">Cancel</button>
+      <button id="deleteAllConfirm" class="danger">Delete all</button>
+    </div>
+  </dialog>
+
+  <script>
+    "use strict";
+    const $ = id => document.getElementById(id);
+    const pad = n => String(n).padStart(2, "0");
+    function fmtDate(us) {
+      const d = new Date(us / 1000);
+      return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+    function fmtSize(bytes) {
+      if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + " MB";
+      if (bytes >= 1024) return (bytes / 1024).toFixed(1) + " kB";
+      return bytes + " B";
+    }
+    function fmtDuration(us) {
+      const s = Math.round(us / 1e6);
+      return `${Math.floor(s / 60)}:${pad(s % 60)} min`;
+    }
+    function setTile(prefix, state, value, sub = "") {
+      $(prefix + "Dot").className = "dot" + (state ? " " + state : "");
+      $(prefix + "Text").textContent = value;
+      $(prefix + "Sub").textContent = sub;
+    }
+
+    // canvas colors mirror theme.css — keep in sync
+    const chartTheme = () => document.documentElement.dataset.theme === "light"
+      ? { surface: "#ffffff", bg: "#f2f4f7", border: "#d5dae2", text: "#1b1f26", flag: "#b58414" }
+      : { surface: "#1c2027", bg: "#14171c", border: "#2c313a", text: "#e6e8eb", flag: "#e6b422" };
+
+    // ---- theme toggle ----
+    $("themeToggle").textContent = document.documentElement.dataset.theme === "light" ? "☾" : "☀";
+    $("themeToggle").onclick = () => {
+      localStorage.setItem("theme", document.documentElement.dataset.theme === "light" ? "dark" : "light");
+      location.reload(); // charts re-init with the new palette
+    };
+
+    // ---- battery ----
+    const BATTERY_CELLS = 12; // 2x 6S LiPo in series (4.2 V/cell max → 50.4 V pack)
+    // resting cell voltage → % (typical LiPo discharge curve).
+    // ponytail: voltage-based SOC sags under load — integrate vdInputCurrent
+    // (coulomb counting) if the reading while driving starts to matter
+    const SOC_CURVE = [
+      [3.27, 0], [3.61, 5], [3.69, 10], [3.71, 15], [3.73, 20], [3.75, 25],
+      [3.77, 30], [3.79, 35], [3.80, 40], [3.82, 45], [3.84, 50], [3.85, 55],
+      [3.87, 60], [3.91, 65], [3.95, 70], [3.98, 75], [4.02, 80], [4.08, 85],
+      [4.11, 90], [4.15, 95], [4.20, 100],
+    ];
+    function socPercent(packVoltage) {
+      const v = packVoltage / BATTERY_CELLS;
+      if (v <= SOC_CURVE[0][0]) return 0;
+      for (let i = 1; i < SOC_CURVE.length; i++) {
+        const [v1, p1] = SOC_CURVE[i];
+        if (v <= v1) {
+          const [v0, p0] = SOC_CURVE[i - 1];
+          return Math.round(p0 + (p1 - p0) * (v - v0) / (v1 - v0));
+        }
+      }
+      return 100;
+    }
+    const STATE_NAMES = ["IDLE", "PRECHARGING", "TS_ACTIVE", "MC_ACTIVE"];
+
+    // ---- status polling ----
+    let lastLogSignature = "";
+    let statusOk = null;
+    async function pollStatus() {
+      try {
+        // a hanging request counts as disconnected — without the timeout a
+        // dead link keeps the tile green until the TCP stack gives up
+        const response = await fetch("api/status", { signal: AbortSignal.timeout(1400) });
+        if (response.status === 401) { location.href = "login.html"; return; }
+        const status = await response.json();
+        $("logout").style.display = status.authEnabled ? "" : "none";
+        setTile("conn", "ok", "connected");
+        if (status.receiving) {
+          setTile("rx", "ok", "receiving", `${status.packetCount} packets`);
+        } else if (status.lastPacketAgeMs < 0) {
+          setTile("rx", "", "no packets");
+        } else {
+          setTile("rx", "warn", `silent ${Math.round(status.lastPacketAgeMs / 1000)}s`, `${status.packetCount} packets`);
+        }
+        if (status.receiving) {
+          const stateName = STATE_NAMES[status.vehicleState] ?? `#${status.vehicleState}`;
+          setTile("state", status.vehicleState === 3 ? "ok" : "warn", stateName);
+        } else {
+          setTile("state", "", "–");
+        }
+        if (status.receiving && status.batteryVoltage > 10) {
+          const soc = socPercent(status.batteryVoltage);
+          setTile("batt", soc > 50 ? "ok" : soc > 20 ? "warn" : "bad",
+            `${status.batteryVoltage.toFixed(1)} V`, `≈ ${soc}% SOC`);
+        } else {
+          setTile("batt", "", "–");
+        }
+        const rec = status.recorder;
+        if (rec.recording) {
+          setTile("rec", "ok", "recording", `${rec.filename} · ${fmtSize(rec.sizeBytes)}`);
+        } else {
+          setTile("rec", "", "idle", `${rec.triggerMode}, ${rec.bufferSeconds}s buffer`);
+        }
+        const signature = `${rec.recording}|${rec.filename}`;
+        if (signature !== lastLogSignature) { lastLogSignature = signature; loadLogs(); }
+        statusOk = true;
+      } catch {
+        statusOk = false;
+        setTile("conn", "bad", "disconnected", "retrying…");
+        setTile("rx", "", "–");
+        setTile("state", "", "–");
+        setTile("batt", "", "–");
+        setTile("rec", "", "–");
+      }
+    }
+    // sequential loop, never overlapping requests: 1s cadence while healthy,
+    // 500ms while disconnected — loss and reconnect both surface within 2.5s
+    (async () => {
+      for (;;) {
+        await pollStatus();
+        await new Promise(resolve => setTimeout(resolve, statusOk ? 1000 : 500));
+      }
+    })();
+
+    // ---- settings ----
+    async function loadSettings() {
+      const settings = await (await fetch("api/settings")).json();
+      $("mode").value = settings.triggerMode;
+      $("bufferSeconds").value = settings.bufferSeconds;
+    }
+    $("save").onclick = async () => {
+      const response = await fetch("api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ triggerMode: $("mode").value, bufferSeconds: Number($("bufferSeconds").value) }),
+      });
+      $("saveMsg").textContent = response.ok ? "saved ✓" : "error: " + await response.text();
+      setTimeout(() => { $("saveMsg").textContent = ""; }, 3000);
+    };
+    loadSettings();
+
+    // ---- log list ----
+    let selectedLog = null;
+    async function loadLogs() {
+      const logs = await (await fetch("api/logs")).json();
+      const tbody = $("logRows");
+      tbody.innerHTML = "";
+      if (!logs.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="dim">No logs yet — they appear as soon as the car drives (or the trigger fires).</td></tr>';
+        return;
+      }
+      for (const log of logs) {
+        const tr = document.createElement("tr");
+        tr.className = "log-row" + (selectedLog && selectedLog.id === log.id ? " selected" : "");
+        const active = log.endedAtUs === null;
+        const duration = active ? "● recording" : fmtDuration(log.endedAtUs - log.startedAtUs);
+        tr.innerHTML = `
+          <td>${log.filename}</td>
+          <td class="num">${fmtDate(log.startedAtUs)}</td>
+          <td class="num">${duration}</td>
+          <td class="num">${active ? "–" : log.recordCount}</td>
+          <td class="num">${active ? "–" : fmtSize(log.sizeBytes)}</td>
+          <td>${log.triggerMode}</td>
+          <td><a href="api/logs/${log.id}/download" onclick="event.stopPropagation()">download</a></td>
+          <td></td>`;
+        if (!active) {
+          const rename = document.createElement("button");
+          rename.textContent = "rename";
+          rename.style.marginRight = "6px";
+          rename.onclick = event => { event.stopPropagation(); renameLog(log); };
+          tr.lastElementChild.appendChild(rename);
+          const button = document.createElement("button");
+          button.className = "danger";
+          button.textContent = "delete";
+          button.onclick = event => { event.stopPropagation(); deleteLog(log); };
+          tr.lastElementChild.appendChild(button);
+        }
+        tr.onclick = () => openLog(log);
+        tbody.appendChild(tr);
+      }
+    }
+    loadLogs();
+
+    async function renameLog(log) {
+      const name = prompt("New filename:", log.filename);
+      if (!name || name === log.filename) return;
+      const response = await fetch(`api/logs/${log.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: name }),
+      });
+      if (!response.ok) { alert("rename failed: " + await response.text()); return; }
+      const updated = await response.json();
+      if (selectedLog && selectedLog.id === log.id) {
+        selectedLog.filename = updated.filename;
+        $("viewerTitle").textContent = `Log: ${updated.filename}`;
+      }
+      loadLogs();
+    }
+
+    async function deleteLog(log) {
+      if (!confirm(`Delete ${log.filename}?`)) return;
+      const response = await fetch(`api/logs/${log.id}`, { method: "DELETE" });
+      if (!response.ok) alert("delete failed: " + await response.text());
+      if (selectedLog && selectedLog.id === log.id) {
+        selectedLog = null;
+        $("viewer").style.display = "none";
+      }
+      loadLogs();
+    }
+
+    $("deleteAll").onclick = () => $("deleteAllDialog").showModal();
+    $("deleteAllCancel").onclick = () => $("deleteAllDialog").close();
+    $("deleteAllConfirm").onclick = async () => {
+      const response = await fetch("api/logs", { method: "DELETE" });
+      if (!response.ok) alert("delete failed: " + await response.text());
+      $("deleteAllDialog").close();
+      selectedLog = null;
+      $("viewer").style.display = "none";
+      loadLogs();
+    };
+
+    // ---- logout ----
+    $("logout").onclick = async event => {
+      event.preventDefault();
+      await fetch("api/logout", { method: "POST" });
+      location.href = "login.html";
+    };
+
+    // ---- firmware OTA ----
+    async function runOta(request) {
+      const out = $("otaOut");
+      out.style.display = "";
+      out.textContent = "running…";
+      try {
+        const response = await request;
+        const result = await response.clone().json().catch(() => null);
+        out.textContent = result
+          ? (result.output || "") + (result.error ? "\n" + result.error : "")
+          : await response.text();
+      } catch (e) {
+        out.textContent = String(e);
+      }
+    }
+    $("otaProbe").onclick = () => runOta(fetch("api/ota/probe"));
+    $("otaFlash").onclick = () => {
+      const file = $("otaFile").files[0];
+      if (!file) { alert("choose a firmware .bin first"); return; }
+      if (!confirm(`Flash ${file.name} (${fmtSize(file.size)}) to the system controller?`)) return;
+      runOta(fetch("api/ota/flash", { method: "POST", body: file }));
+    };
+
+    // ---- viewer with dynamic resampled loading ----
+    const DEFAULT_VISIBLE = new Set([
+      "vdBatteryVoltage", "vdMotorCurrentLeft", "vdMotorCurrentRight",
+      "steeringThrottle", "vdErpmLeft", "vdErpmRight",
+    ]);
+    let plotInitialized = false;
+    let suppressRelayout = false;
+
+    async function fetchWindow(fromUs, toUs) {
+      const points = Math.max(500, Math.round(($("plot").clientWidth || 1200) * 2));
+      let url = `api/logs/${selectedLog.id}/data?points=${points}`;
+      if (fromUs && toUs) url += `&from=${Math.round(fromUs)}&to=${Math.round(toUs)}`;
+      return (await fetch(url)).json();
+    }
+
+    // channels are grouped by magnitude onto separate y-axes so a 0/1 flag
+    // is not squashed under an 8000 erpm scale: flags (≤1.5) on a fixed
+    // hidden axis, mid-range values left, large values right
+    function axisFor(values) {
+      const maxAbs = values.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+      if (maxAbs <= 1.5) return "y3";
+      if (maxAbs <= 500) return "y";
+      return "y2";
+    }
+
+    function buildTraces(result, visibility) {
+      return Object.keys(result.channels).sort().map(name => {
+        const channel = result.channels[name];
+        const stepMs = 1000 / channel.sampleRateHz;
+        const startMs = channel.startUs / 1000;
+        const yaxis = axisFor(channel.values);
+        return {
+          name,
+          x: channel.values.map((_, i) => new Date(startMs + i * stepMs)),
+          y: channel.values,
+          yaxis,
+          type: "scattergl",
+          mode: "lines",
+          line: yaxis === "y3" ? { shape: "hv" } : {},
+          visible: visibility ? visibility(name) : true,
+        };
+      });
+    }
+
+    async function renderWindow(fromUs, toUs) {
+      const result = await fetchWindow(fromUs, toUs);
+      const plot = $("plot");
+      if (!plotInitialized) {
+        const traces = buildTraces(result, name => DEFAULT_VISIBLE.has(name) ? true : "legendonly");
+        await Plotly.newPlot(plot, traces, layout(result.flagsUs), { responsive: true });
+        plotInitialized = true;
+        plot.on("plotly_relayout", onRelayout);
+      } else {
+        const visibility = {};
+        for (const trace of plot.data) visibility[trace.name] = trace.visible;
+        const traces = buildTraces(result, name => visibility[name] ?? "legendonly");
+        suppressRelayout = true;
+        await Plotly.react(plot, traces, { ...plot.layout, ...layout(result.flagsUs) });
+        suppressRelayout = false;
+      }
+      const rate = Object.values(result.channels)[0]?.sampleRateHz ?? 0;
+      const flagCount = (result.flagsUs || []).length;
+      $("plotInfo").textContent = `window: ${fmtDate(result.fromUs)} – ${fmtDate(result.toUs)} @ ${rate.toFixed(1)} Hz effective`
+        + (flagCount ? ` — ${flagCount} ⚑` : "");
+    }
+
+    function layout(flagsUs) {
+      const t = chartTheme();
+      // flag button presses as vertical markers — independent of trace
+      // visibility, so flags are always shown
+      const flagX = (flagsUs || []).map(us => new Date(us / 1000));
+      return {
+        paper_bgcolor: t.surface, plot_bgcolor: t.bg,
+        font: { color: t.text, size: 12, family: "ui-sans-serif, system-ui, sans-serif" },
+        margin: { t: 24, r: 20, b: 40, l: 50 },
+        xaxis: { gridcolor: t.border },
+        yaxis: { gridcolor: t.border, title: { text: "value", font: { size: 11 } } },
+        yaxis2: { overlaying: "y", side: "right", showgrid: false, title: { text: "large (erpm, mA, counters)", font: { size: 11 } } },
+        yaxis3: { overlaying: "y", visible: false, range: [-0.05, 1.05], fixedrange: true },
+        legend: { orientation: "h", y: -0.12 },
+        uirevision: selectedLog?.id,
+        shapes: flagX.map(x => ({
+          type: "line", xref: "x", yref: "paper", x0: x, x1: x, y0: 0, y1: 1,
+          line: { color: t.flag, width: 1.5, dash: "dot" },
+        })),
+        annotations: flagX.map(x => ({
+          xref: "x", yref: "paper", x, y: 1, yanchor: "bottom",
+          text: "⚑", showarrow: false, font: { color: t.flag, size: 15 },
+        })),
+      };
+    }
+
+    function onRelayout(event) {
+      if (suppressRelayout || !selectedLog) return;
+      if (event["xaxis.autorange"]) { renderWindow(); return; }
+      const from = event["xaxis.range[0]"], to = event["xaxis.range[1]"];
+      if (from === undefined || to === undefined) return;
+      renderWindow(new Date(from).getTime() * 1000, new Date(to).getTime() * 1000);
+    }
+
+    async function openLog(log) {
+      selectedLog = log;
+      plotInitialized = false;
+      $("viewer").style.display = "";
+      $("viewerTitle").textContent = `Log: ${log.filename}`;
+      loadLogs();
+      await renderWindow();
+      $("viewer").scrollIntoView({ behavior: "smooth" });
+    }
+    $("resetZoom").onclick = () => renderWindow();
+  </script>
+</body>
+</html>
